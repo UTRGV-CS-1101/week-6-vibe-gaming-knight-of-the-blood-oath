@@ -3,47 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Epic RingWeasel</title>
+    <title>Weasel Horror: Escape the Forest</title>
     <style>
         body {
             margin: 0;
             padding: 20px;
-            background: #2c3e50;
+            background: #0a0a0a;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            font-family: Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
         }
         
         .game-container {
-            background: #34495e;
+            background: #1a1a1a;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 30px rgba(0,0,0,0.8);
+            border: 2px solid #333;
         }
         
         canvas {
-            border: 3px solid #ecf0f1;
+            border: 3px solid #8B0000;
             background: #000;
             display: block;
             border-radius: 5px;
         }
         
         .controls {
-            color: white;
+            color: #aaa;
             text-align: center;
             margin-top: 15px;
-            font-size: 14px;
+            font-size: 12px;
         }
         
         .controls h3 {
             margin: 0 0 10px 0;
-            color: #ecf0f1;
+            color: #ff4444;
         }
         
         .key {
-            background: #3498db;
+            background: #8B0000;
             color: white;
             padding: 4px 8px;
             border-radius: 3px;
@@ -54,15 +55,15 @@
 </head>
 <body>
     <div class="game-container">
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <canvas id="gameCanvas" width="1000" height="600"></canvas>
         <div class="controls">
-            <h3>Controls</h3>
-            <p>Use <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> keys to move the weasel</p>
+            <h3>⚠️ ESCAPE THE WEASEL! ⚠️</h3>
+            <p>Use <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> to move • Collect <span class="key">⭐</span> for speed boost (5s) • Reach the <span class="key">🚪</span> to escape!</p>
         </div>
     </div>
 
     <script>
-        class WeaselGame {
+        class HorrorGame {
             constructor() {
                 this.canvas = document.getElementById('gameCanvas');
                 this.ctx = this.canvas.getContext('2d');
@@ -71,256 +72,469 @@
                 this.gameWidth = this.canvas.width;
                 this.gameHeight = this.canvas.height;
                 
-                // Player settings
+                // World map (larger than visible area for first-person effect)
+                this.worldWidth = 2000;
+                this.worldHeight = 2000;
+                
+                // Player
                 this.player = {
-                    x: this.gameWidth / 2,
-                    y: this.gameHeight / 2,
-                    width: 64,
-                    height: 64,
-                    speed: 5,
+                    x: 1000,
+                    y: 1000,
+                    radius: 30,
+                    baseSpeed: 6,
+                    speed: 6,
+                    angle: 0,
+                    speedBoostEnd: 0
+                };
+                
+                // Weasel creature (chasing enemy)
+                this.weasel = {
+                    x: 200,
+                    y: 200,
+                    radius: 40,
+                    speed: 4,
                     image: null,
                     imageLoaded: false
                 };
                 
-                // Input handling
-                this.keys = {
-                    w: false,
-                    a: false,
-                    s: false,
-                    d: false
+                // Exit/Door
+                this.exit = {
+                    x: 1800,
+                    y: 1800,
+                    width: 80,
+                    height: 120
                 };
                 
+                // Collectibles for speed boost
+                this.collectibles = [];
+                this.lastCollectibleSpawn = 0;
+                this.collectibleSpawnDelay = 5000; // Spawn every 5 seconds
+                
+                // Input
+                this.keys = { w: false, a: false, s: false, d: false };
+                
                 // Game state
-                this.gameState = 'playing'; // 'playing' or 'gameOver'
+                this.gameState = 'playing'; // 'playing', 'won', 'lost'
                 this.gameStartTime = Date.now();
                 this.gameEndTime = null;
-                
-                // Rings
-                this.rings = [];
-                this.ringSpawnDelay = 3000; // 3 seconds
-                this.lastRingSpawn = 0;
-                this.ringsSpawned = 0;
+                this.distance = 0;
                 
                 this.init();
             }
             
             init() {
-                // Load player sprite
-                this.player.image = new Image();
-                this.player.image.onload = () => {
-                    this.player.imageLoaded = true;
+                // Load weasel image
+                this.weasel.image = new Image();
+                this.weasel.image.onload = () => {
+                    this.weasel.imageLoaded = true;
                 };
-                this.player.image.onerror = () => {
-                    console.log('Could not load weasel.png, using placeholder');
-                    this.player.imageLoaded = false;
+                this.weasel.image.onerror = () => {
+                    this.weasel.imageLoaded = false;
                 };
-                this.player.image.src = 'weasel.png';
+                this.weasel.image.src = 'weasel.png';
                 
-                // Set up event listeners
                 this.setupInputHandlers();
-                
-                // Start game loop
                 this.gameLoop();
             }
             
             setupInputHandlers() {
                 document.addEventListener('keydown', (e) => {
-                    switch(e.key.toLowerCase()) {
-                        case 'w':
-                            this.keys.w = true;
-                            break;
-                        case 'a':
-                            this.keys.a = true;
-                            break;
-                        case 's':
-                            this.keys.s = true;
-                            break;
-                        case 'd':
-                            this.keys.d = true;
-                            break;
-                    }
-                    e.preventDefault();
+                    const key = e.key.toLowerCase();
+                    if (key === 'w') this.keys.w = true;
+                    if (key === 'a') this.keys.a = true;
+                    if (key === 's') this.keys.s = true;
+                    if (key === 'd') this.keys.d = true;
                 });
                 
                 document.addEventListener('keyup', (e) => {
-                    switch(e.key.toLowerCase()) {
-                        case 'w':
-                            this.keys.w = false;
-                            break;
-                        case 'a':
-                            this.keys.a = false;
-                            break;
-                        case 's':
-                            this.keys.s = false;
-                            break;
-                        case 'd':
-                            this.keys.d = false;
-                            break;
-                    }
-                    e.preventDefault();
+                    const key = e.key.toLowerCase();
+                    if (key === 'w') this.keys.w = false;
+                    if (key === 'a') this.keys.a = false;
+                    if (key === 's') this.keys.s = false;
+                    if (key === 'd') this.keys.d = false;
                 });
             }
             
             update() {
-                if (this.gameState === 'gameOver') return;
+                if (this.gameState !== 'playing') return;
                 
-                // Spawn rings every 3 seconds
+                // Handle player movement
+                let moveX = 0;
+                let moveY = 0;
+                
+                if (this.keys.w) moveY -= 1;
+                if (this.keys.s) moveY += 1;
+                if (this.keys.a) moveX -= 1;
+                if (this.keys.d) moveX += 1;
+                
+                // Normalize diagonal movement
+                if (moveX !== 0 || moveY !== 0) {
+                    const length = Math.sqrt(moveX * moveX + moveY * moveY);
+                    moveX /= length;
+                    moveY /= length;
+                    
+                    // Update angle for rendering
+                    this.player.angle = Math.atan2(moveY, moveX);
+                    
+                    // Apply speed boost if active
+                    const currentTime = Date.now();
+                    if (currentTime < this.player.speedBoostEnd) {
+                        this.player.speed = this.player.baseSpeed * 1.8; // 80% speed increase
+                    } else {
+                        this.player.speed = this.player.baseSpeed;
+                    }
+                    
+                    this.player.x += moveX * this.player.speed;
+                    this.player.y += moveY * this.player.speed;
+                }
+                
+                // Keep player in world bounds
+                this.player.x = Math.max(50, Math.min(this.worldWidth - 50, this.player.x));
+                this.player.y = Math.max(50, Math.min(this.worldHeight - 50, this.player.y));
+                
+                // Update weasel AI (chase player)
+                this.updateWeasel();
+                
+                // Update collectibles
+                this.updateCollectibles();
+                
+                // Spawn collectibles
                 const currentTime = Date.now();
-                if (this.ringsSpawned < 3 && currentTime - this.gameStartTime > this.ringSpawnDelay * (this.ringsSpawned + 1)) {
-                    this.spawnRing();
-                    this.ringsSpawned++;
+                if (currentTime - this.lastCollectibleSpawn > this.collectibleSpawnDelay && this.collectibles.length < 5) {
+                    this.spawnCollectible();
+                    this.lastCollectibleSpawn = currentTime;
                 }
-                
-                // Handle movement
-                if (this.keys.w) {
-                    this.player.y -= this.player.speed;
-                }
-                if (this.keys.s) {
-                    this.player.y += this.player.speed;
-                }
-                if (this.keys.a) {
-                    this.player.x -= this.player.speed;
-                }
-                if (this.keys.d) {
-                    this.player.x += this.player.speed;
-                }
-                
-                // Keep player within boundaries
-                this.player.x = Math.max(0, Math.min(this.gameWidth - this.player.width, this.player.x));
-                this.player.y = Math.max(0, Math.min(this.gameHeight - this.player.height, this.player.y));
-                
-                // Update rings
-                this.updateRings();
                 
                 // Check collisions
                 this.checkCollisions();
+                
+                // Calculate distance to exit
+                const exitCenterX = this.exit.x + this.exit.width / 2;
+                const exitCenterY = this.exit.y + this.exit.height / 2;
+                this.distance = Math.sqrt(
+                    Math.pow(exitCenterX - this.player.x, 2) + 
+                    Math.pow(exitCenterY - this.player.y, 2)
+                );
+            }
+            
+            updateWeasel() {
+                // Simple AI: move towards player
+                const dx = this.player.x - this.weasel.x;
+                const dy = this.player.y - this.weasel.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > 0) {
+                    this.weasel.x += (dx / distance) * this.weasel.speed;
+                    this.weasel.y += (dy / distance) * this.weasel.speed;
+                }
+                
+                // Keep weasel in world bounds
+                this.weasel.x = Math.max(50, Math.min(this.worldWidth - 50, this.weasel.x));
+                this.weasel.y = Math.max(50, Math.min(this.worldHeight - 50, this.weasel.y));
+            }
+            
+            spawnCollectible() {
+                const collectible = {
+                    x: Math.random() * (this.worldWidth - 100) + 50,
+                    y: Math.random() * (this.worldHeight - 100) + 50,
+                    radius: 15
+                };
+                this.collectibles.push(collectible);
+            }
+            
+            updateCollectibles() {
+                this.collectibles = this.collectibles.filter(c => {
+                    // Remove if too far from any relevant area
+                    return true;
+                });
             }
             
             draw() {
                 // Clear canvas
-                this.ctx.clearRect(0, 0, this.gameWidth, this.gameHeight);
-                
-                // Draw black background
                 this.ctx.fillStyle = '#000';
                 this.ctx.fillRect(0, 0, this.gameWidth, this.gameHeight);
                 
-                // Draw rings
-                this.drawRings();
+                // Apply camera offset (center on player)
+                const cameraX = this.player.x - this.gameWidth / 2;
+                const cameraY = this.player.y - this.gameHeight / 2;
                 
-                // Draw player
+                this.ctx.save();
+                this.ctx.translate(-cameraX, -cameraY);
+                
+                // Draw forest background
+                this.drawForest(cameraX, cameraY);
+                
+                // Draw collectibles
+                this.drawCollectibles();
+                
+                // Draw exit/door
+                this.drawExit();
+                
+                // Draw weasel
+                this.drawWeasel();
+                
+                // Draw player (crosshair/indicator)
                 this.drawPlayer();
                 
-                // Draw UI
-                this.drawUI();
+                this.ctx.restore();
                 
-                // Draw game over screen if needed
-                if (this.gameState === 'gameOver') {
-                    this.drawGameOver();
-                }
-            }
-            
-            spawnRing() {
-                const ring = {
-                    x: Math.random() * (this.gameWidth - 60),
-                    y: Math.random() * (this.gameHeight - 60),
-                    radius: 30,
-                    speed: 8 + (this.ringsSpawned * 2), // Ring 1: 8, Ring 2: 10, Ring 3: 12
-                    dx: (Math.random() - 0.5) * 2, // Random direction
-                    dy: (Math.random() - 0.5) * 2
-                };
+                // Draw HUD
+                this.drawHUD();
                 
-                // Normalize direction vector
-                const length = Math.sqrt(ring.dx * ring.dx + ring.dy * ring.dy);
-                ring.dx = (ring.dx / length) * ring.speed;
-                ring.dy = (ring.dy / length) * ring.speed;
-                
-                this.rings.push(ring);
-            }
-            
-            updateRings() {
-                // Check ring-to-ring collisions first
-                for (let i = 0; i < this.rings.length; i++) {
-                    for (let j = i + 1; j < this.rings.length; j++) {
-                        this.checkRingCollision(this.rings[i], this.rings[j]);
-                    }
-                }
-                
-                // Update ring positions
-                for (let ring of this.rings) {
-                    // Move ring
-                    ring.x += ring.dx;
-                    ring.y += ring.dy;
-                    
-                    // Bounce off walls
-                    if (ring.x - ring.radius <= 0 || ring.x + ring.radius >= this.gameWidth) {
-                        ring.dx = -ring.dx;
-                        ring.x = Math.max(ring.radius, Math.min(this.gameWidth - ring.radius, ring.x));
-                    }
-                    if (ring.y - ring.radius <= 0 || ring.y + ring.radius >= this.gameHeight) {
-                        ring.dy = -ring.dy;
-                        ring.y = Math.max(ring.radius, Math.min(this.gameHeight - ring.radius, ring.y));
-                    }
-                }
-            }
-            
-            checkRingCollision(ring1, ring2) {
-                const dx = ring2.x - ring1.x;
-                const dy = ring2.y - ring1.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance < ring1.radius + ring2.radius) {
-                    // Calculate collision normal
-                    const normalX = dx / distance;
-                    const normalY = dy / distance;
-                    
-                    // Separate rings to prevent overlap
-                    const overlap = ring1.radius + ring2.radius - distance;
-                    const separationX = normalX * overlap * 0.5;
-                    const separationY = normalY * overlap * 0.5;
-                    
-                    ring1.x -= separationX;
-                    ring1.y -= separationY;
-                    ring2.x += separationX;
-                    ring2.y += separationY;
-                    
-                    // Calculate relative velocity
-                    const relativeVelocityX = ring2.dx - ring1.dx;
-                    const relativeVelocityY = ring2.dy - ring1.dy;
-                    
-                    // Calculate relative velocity along normal
-                    const velocityAlongNormal = relativeVelocityX * normalX + relativeVelocityY * normalY;
-                    
-                    // Don't resolve if objects are separating
-                    if (velocityAlongNormal > 0) return;
-                    
-                    // Calculate impulse scalar (assuming equal mass)
-                    const impulse = -2 * velocityAlongNormal / 2;
-                    
-                    // Apply impulse to velocities
-                    ring1.dx -= impulse * normalX;
-                    ring1.dy -= impulse * normalY;
-                    ring2.dx += impulse * normalX;
-                    ring2.dy += impulse * normalY;
+                // Draw game over screens
+                if (this.gameState === 'won') {
+                    this.drawWinScreen();
+                } else if (this.gameState === 'lost') {
+                    this.drawLoseScreen();
                 }
             }
             
             checkCollisions() {
-                const playerCenterX = this.player.x + this.player.width / 2;
-                const playerCenterY = this.player.y + this.player.height / 2;
-                const playerRadius = Math.min(this.player.width, this.player.height) / 2;
+                // Check player-weasel collision (lose condition)
+                const dxWeasel = this.weasel.x - this.player.x;
+                const dyWeasel = this.weasel.y - this.player.y;
+                const distanceWeasel = Math.sqrt(dxWeasel * dxWeasel + dyWeasel * dyWeasel);
                 
-                for (let ring of this.rings) {
-                    const distance = Math.sqrt(
-                        Math.pow(playerCenterX - ring.x, 2) + 
-                        Math.pow(playerCenterY - ring.y, 2)
-                    );
+                if (distanceWeasel < this.player.radius + this.weasel.radius) {
+                    this.gameState = 'lost';
+                    this.gameEndTime = Date.now();
+                    return;
+                }
+                
+                // Check player-collectible collision
+                for (let i = this.collectibles.length - 1; i >= 0; i--) {
+                    const c = this.collectibles[i];
+                    const dxCollect = c.x - this.player.x;
+                    const dyCollect = c.y - this.player.y;
+                    const distanceCollect = Math.sqrt(dxCollect * dxCollect + dyCollect * dyCollect);
                     
-                    if (distance < playerRadius + ring.radius) {
-                        this.gameState = 'gameOver';
-                        this.gameEndTime = Date.now();
-                        return;
+                    if (distanceCollect < this.player.radius + c.radius) {
+                        this.collectibles.splice(i, 1);
+                        this.player.speedBoostEnd = Date.now() + 5000; // 5 second boost
                     }
                 }
+                
+                // Check player-exit collision (win condition)
+                if (this.player.x > this.exit.x && this.player.x < this.exit.x + this.exit.width &&
+                    this.player.y > this.exit.y && this.player.y < this.exit.y + this.exit.height) {
+                    this.gameState = 'won';
+                    this.gameEndTime = Date.now();
+                }
+            }
+            
+            drawForest(cameraX, cameraY) {
+                // Forest floor - dark green/brown
+                this.ctx.fillStyle = '#1a3d1a';
+                this.ctx.fillRect(cameraX, cameraY, this.gameWidth * 2, this.gameHeight * 2);
+                
+                // Tree-like pattern for forest atmosphere
+                for (let x = 0; x < this.worldWidth; x += 150) {
+                    for (let y = 0; y < this.worldHeight; y += 150) {
+                        // Tree shadows/obstacles
+                        this.ctx.fillStyle = '#0d2610';
+                        this.ctx.fillRect(x, y, 50, 80);
+                        this.ctx.fillStyle = '#1a5c1a';
+                        this.ctx.fillRect(x + 10, y - 20, 30, 40);
+                    }
+                }
+                
+                // Some random darker spots for atmosphere
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                for (let i = 0; i < 20; i++) {
+                    const x = (i * 173) % this.worldWidth;
+                    const y = (i * 241) % this.worldHeight;
+                    this.ctx.fillRect(x, y, 100, 100);
+                }
+            }
+            
+            drawCollectibles() {
+                this.ctx.fillStyle = '#FFD700';
+                this.ctx.strokeStyle = '#FFA500';
+                this.ctx.lineWidth = 2;
+                
+                for (let collectible of this.collectibles) {
+                    // Star shape for collectible
+                    this.drawStar(collectible.x, collectible.y, 5, collectible.radius, collectible.radius * 0.6);
+                }
+            }
+            
+            drawStar(cx, cy, spikes, outerRadius, innerRadius) {
+                let rot = Math.PI / 2 * 3;
+                let step = Math.PI / spikes;
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(cx, cy - outerRadius);
+                for (let i = 0; i < spikes; i++) {
+                    this.ctx.lineTo(cx + Math.cos(rot) * outerRadius, cy + Math.sin(rot) * outerRadius);
+                    rot += step;
+                    this.ctx.lineTo(cx + Math.cos(rot) * innerRadius, cy + Math.sin(rot) * innerRadius);
+                    rot += step;
+                }
+                this.ctx.lineTo(cx, cy - outerRadius);
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.stroke();
+            }
+            
+            drawExit() {
+                // Door frame
+                this.ctx.fillStyle = '#8B4513';
+                this.ctx.fillRect(this.exit.x - 5, this.exit.y - 5, this.exit.width + 10, this.exit.height + 10);
+                
+                // Door
+                this.ctx.fillStyle = '#CD853F';
+                this.ctx.fillRect(this.exit.x, this.exit.y, this.exit.width, this.exit.height);
+                
+                // Door details
+                this.ctx.fillStyle = '#FFD700';
+                this.ctx.beginPath();
+                this.ctx.arc(this.exit.x + this.exit.width - 15, this.exit.y + this.exit.height / 2, 8, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                // Door label
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = 'bold 16px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('EXIT', this.exit.x + this.exit.width / 2, this.exit.y + this.exit.height / 2);
+            }
+            
+            drawWeasel() {
+                if (this.weasel.imageLoaded && this.weasel.image.complete) {
+                    this.ctx.drawImage(
+                        this.weasel.image,
+                        this.weasel.x - this.weasel.radius,
+                        this.weasel.y - this.weasel.radius,
+                        this.weasel.radius * 2,
+                        this.weasel.radius * 2
+                    );
+                } else {
+                    // Weasel placeholder - make it look menacing
+                    this.ctx.fillStyle = '#8B7355';
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(this.weasel.x, this.weasel.y, this.weasel.radius, this.weasel.radius * 0.7, 0, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    
+                    // Eyes - red and evil
+                    this.ctx.fillStyle = '#FF0000';
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.weasel.x - 15, this.weasel.y - 10, 8, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.weasel.x + 15, this.weasel.y - 10, 8, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    
+                    // Teeth
+                    this.ctx.strokeStyle = '#FFF';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(this.weasel.x - 10, this.weasel.y + 10);
+                    for (let i = 0; i < 5; i++) {
+                        this.ctx.lineTo(this.weasel.x - 10 + i * 4, this.weasel.y + 15);
+                        this.ctx.lineTo(this.weasel.x - 8 + i * 4, this.weasel.y + 10);
+                    }
+                    this.ctx.stroke();
+                }
+            }
+            
+            drawPlayer() {
+                // First-person crosshair
+                this.ctx.strokeStyle = '#00FF00';
+                this.ctx.lineWidth = 2;
+                
+                // Center point
+                this.ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+                this.ctx.beginPath();
+                this.ctx.arc(this.player.x, this.player.y, 5, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                // Crosshair
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.player.x - 15, this.player.y);
+                this.ctx.lineTo(this.player.x - 25, this.player.y);
+                this.ctx.moveTo(this.player.x + 15, this.player.y);
+                this.ctx.lineTo(this.player.x + 25, this.player.y);
+                this.ctx.moveTo(this.player.x, this.player.y - 15);
+                this.ctx.lineTo(this.player.x, this.player.y - 25);
+                this.ctx.moveTo(this.player.x, this.player.y + 15);
+                this.ctx.lineTo(this.player.x, this.player.y + 25);
+                this.ctx.stroke();
+            }
+            
+            drawHUD() {
+                // Semi-transparent background for HUD
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                this.ctx.fillRect(0, 0, this.gameWidth, 80);
+                
+                // Time survived
+                const currentTime = this.gameState === 'playing' ? Date.now() : this.gameEndTime;
+                const survivalTime = Math.floor((currentTime - this.gameStartTime) / 1000);
+                
+                this.ctx.fillStyle = '#00FF00';
+                this.ctx.font = 'bold 18px Arial';
+                this.ctx.textAlign = 'left';
+                this.ctx.fillText(`⏱ Time: ${survivalTime}s`, 20, 30);
+                
+                // Distance to exit
+                this.ctx.fillText(`📍 Distance to Exit: ${Math.round(this.distance)}m`, 20, 55);
+                
+                // Speed boost indicator
+                const currentTime2 = Date.now();
+                if (currentTime2 < this.player.speedBoostEnd) {
+                    const remainingBoost = Math.round((this.player.speedBoostEnd - currentTime2) / 1000 * 10) / 10;
+                    this.ctx.fillStyle = '#FFD700';
+                    this.ctx.font = 'bold 18px Arial';
+                    this.ctx.fillText(`⚡ BOOST: ${remainingBoost}s`, 20, 80);
+                }
+                
+                // Collectibles count
+                this.ctx.fillStyle = '#FFD700';
+                this.ctx.font = '14px Arial';
+                this.ctx.textAlign = 'right';
+                this.ctx.fillText(`Stars found: ${5 - this.collectibles.length}/5`, this.gameWidth - 20, 30);
+            }
+            
+            drawWinScreen() {
+                // Overlay
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                this.ctx.fillRect(0, 0, this.gameWidth, this.gameHeight);
+                
+                // Victory text
+                this.ctx.fillStyle = '#00FF00';
+                this.ctx.font = 'bold 60px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('🎉 YOU ESCAPED! 🎉', this.gameWidth / 2, this.gameHeight / 2 - 60);
+                
+                // Stats
+                const survivalTime = Math.floor((this.gameEndTime - this.gameStartTime) / 1000);
+                this.ctx.fillStyle = '#FFD700';
+                this.ctx.font = 'bold 28px Arial';
+                this.ctx.fillText(`Survived: ${survivalTime} seconds`, this.gameWidth / 2, this.gameHeight / 2 + 30);
+                
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = '20px Arial';
+                this.ctx.fillText('Refresh page to play again', this.gameWidth / 2, this.gameHeight / 2 + 80);
+            }
+            
+            drawLoseScreen() {
+                // Overlay
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                this.ctx.fillRect(0, 0, this.gameWidth, this.gameHeight);
+                
+                // Game over text
+                this.ctx.fillStyle = '#FF0000';
+                this.ctx.font = 'bold 60px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText('😱 CAUGHT! GAME OVER 😱', this.gameWidth / 2, this.gameHeight / 2 - 60);
+                
+                // Stats
+                const survivalTime = Math.floor((this.gameEndTime - this.gameStartTime) / 1000);
+                this.ctx.fillStyle = '#fff';
+                this.ctx.font = 'bold 24px Arial';
+                this.ctx.fillText(`You survived: ${survivalTime} seconds`, this.gameWidth / 2, this.gameHeight / 2 + 30);
+                
+                this.ctx.fillStyle = '#FFD700';
+                this.ctx.font = '20px Arial';
+                this.ctx.fillText('Refresh page to try again', this.gameWidth / 2, this.gameHeight / 2 + 80);
             }
             
             drawRings() {
@@ -385,48 +599,6 @@
                 }
             }
             
-            drawUI() {
-                // Draw position indicator
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-                this.ctx.fillRect(10, 10, 200, 80);
-                
-                this.ctx.fillStyle = '#fff';
-                this.ctx.font = '14px Arial';
-                this.ctx.textAlign = 'left';
-                this.ctx.fillText(`Position: ${Math.round(this.player.x)}, ${Math.round(this.player.y)}`, 20, 30);
-                this.ctx.fillText(`Speed: ${this.player.speed}`, 20, 50);
-                this.ctx.fillText(`Rings: ${this.rings.length}/3`, 20, 70);
-                
-                // Draw survival time
-                const currentTime = this.gameState === 'gameOver' ? this.gameEndTime : Date.now();
-                const survivalTime = Math.floor((currentTime - this.gameStartTime) / 1000);
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-                this.ctx.fillRect(this.gameWidth - 120, 10, 110, 30);
-                this.ctx.fillStyle = '#fff';
-                this.ctx.textAlign = 'right';
-                this.ctx.fillText(`Time: ${survivalTime}s`, this.gameWidth - 20, 30);
-            }
-            
-            drawGameOver() {
-                // Draw overlay
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-                this.ctx.fillRect(0, 0, this.gameWidth, this.gameHeight);
-                
-                // Draw game over text
-                this.ctx.fillStyle = '#ff0000';
-                this.ctx.font = 'bold 48px Arial';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText('GAME OVER', this.gameWidth / 2, this.gameHeight / 2 - 40);
-                
-                const survivalTime = Math.floor((this.gameEndTime - this.gameStartTime) / 1000);
-                this.ctx.fillStyle = '#fff';
-                this.ctx.font = '24px Arial';
-                this.ctx.fillText(`You survived ${survivalTime} seconds!`, this.gameWidth / 2, this.gameHeight / 2 + 20);
-                
-                this.ctx.font = '18px Arial';
-                this.ctx.fillText('Refresh to play again', this.gameWidth / 2, this.gameHeight / 2 + 60);
-            }
-            
             gameLoop() {
                 this.update();
                 this.draw();
@@ -434,9 +606,9 @@
             }
         }
         
-        // Start the game when page loads
+        // Start game when page loads
         window.addEventListener('load', () => {
-            new WeaselGame();
+            new HorrorGame();
         });
     </script>
 </body>
