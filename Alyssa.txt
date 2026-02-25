@@ -1,0 +1,3 @@
+Make the collectibles the player finds to increase their speed look like energy drinks.
+
+Make the game look detailed
