@@ -1,0 +1,4 @@
+make a horror game about first person view with a movement with the weasel
+ png being the creatuire chasing the player in a forest like area. Add 
+ collectibles that make the player increase their speed for a 5 seconds, 
+ make a doorway so the player can escape with a winning screen at the end.
