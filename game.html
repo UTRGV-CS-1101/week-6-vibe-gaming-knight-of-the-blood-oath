@@ -58,7 +58,7 @@
         <canvas id="gameCanvas" width="1000" height="600"></canvas>
         <div class="controls">
             <h3>⚠️ ESCAPE THE WEASEL! ⚠️</h3>
-            <p>Use <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> to move • Collect <span class="key">⭐</span> for speed boost (5s) • Reach the <span class="key">🚪</span> to escape!</p>
+            <p>Use <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> to move • Collect <span class="key">⭐</span> for speed boost (3s) • Reach the <span class="key">🚪</span> to escape!</p>
         </div>
     </div>
 
@@ -73,8 +73,8 @@
                 this.gameHeight = this.canvas.height;
                 
                 // World map (larger than visible area for first-person effect)
-                this.worldWidth = 2000;
-                this.worldHeight = 2000;
+                this.worldWidth = 4000;
+                this.worldHeight = 4000;
                 
                 // Player
                 this.player = {
@@ -97,10 +97,10 @@
                     imageLoaded: false
                 };
                 
-                // Exit/Door
+                // Exit/Door (positioned on load)
                 this.exit = {
-                    x: 1800,
-                    y: 1800,
+                    x: 0,
+                    y: 0,
                     width: 80,
                     height: 120
                 };
@@ -134,6 +134,14 @@
                 this.weasel.image.src = 'weasel.png';
                 
                 this.setupInputHandlers();
+
+                // Start player in center of the world
+                this.player.x = this.worldWidth / 2;
+                this.player.y = this.worldHeight / 2;
+
+                // Place exit at a random position (not too close to player)
+                this.placeExitRandomly();
+
                 this.gameLoop();
             }
             
@@ -248,6 +256,31 @@
                     return true;
                 });
             }
+
+            placeExitRandomly() {
+                const margin = 100;
+                const minDistanceFromPlayer = Math.max(this.gameWidth, this.gameHeight) * 0.8;
+                let x, y, dx, dy, dist;
+
+                // Try a few times to find a spot far enough from the player
+                for (let i = 0; i < 100; i++) {
+                    x = Math.random() * (this.worldWidth - this.exit.width - margin * 2) + margin;
+                    y = Math.random() * (this.worldHeight - this.exit.height - margin * 2) + margin;
+                    dx = (x + this.exit.width / 2) - this.player.x;
+                    dy = (y + this.exit.height / 2) - this.player.y;
+                    dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist >= minDistanceFromPlayer) break;
+                }
+
+                // Fallback to top-left if nothing suitable found
+                if (typeof x === 'undefined') {
+                    x = margin;
+                    y = margin;
+                }
+
+                this.exit.x = x;
+                this.exit.y = y;
+            }
             
             draw() {
                 // Clear canvas
@@ -310,7 +343,7 @@
                     
                     if (distanceCollect < this.player.radius + c.radius) {
                         this.collectibles.splice(i, 1);
-                        this.player.speedBoostEnd = Date.now() + 5000; // 5 second boost
+                        this.player.speedBoostEnd = Date.now() + 3000; // 3 second boost
                     }
                 }
                 
